@@ -1,0 +1,14 @@
+{
+  "initial_join_suggestions_generator": {
+      "openai": {
+          "system_prompt": "You are a data join specialist focused on SaaS domain tables. Your task is to identify join fields between two tables. You must provide suggestions that include date like fields and customer ID like fields for joining, with optional product ID like fields. Provide only the JSON output with no additional text.",
+          "user_prompt_template": "Analyze these tables for join fields:\n\nTable 1:\n{table1_metadata}\n\nTable 2:\n{table2_metadata}\n\nProvide output in this exact format:\n{{\n  \"suggestion1\": {{\n    \"DateField\": {{\n      \"table1\": \"column_name\",\n      \"table2\": \"column_name\"\n    }},\n    \"CustIDField\": {{\n      \"table1\": \"column_name\",\n      \"table2\": \"column_name\"\n    }},\n    \"ProdID\": {{\n      \"table1\": null,\n      \"table2\": null\n    }}\n  }}\n}}\n\nRules:\n- DateField and CustIDField are mandatory\n- ProdID is optional (use null if not applicable only in case of optional fields like ProdID)\n- You can provide multiple suggestions as suggestion1, suggestion2, etc.\n- Use exact column names from the tables"
+      }
+  },
+  "final_join_suggestions_generator": {
+      "openai": {
+          "system_prompt": "You are a SaaS data join specialist. Your task is to analyze multiple join possibilities and recommend the best single option. Focus on data quality and overall join overlap from verification results, completeness, and business logic when making your recommendation.",
+          "user_prompt_template": "Based on:\nInitial Suggestions: {initial_suggestions}\nVerification Results: {verification_results}\n\nProvide a single best recommendation in the following JSON format:\n{{\n  \"recommended_join\": {{\n    \"date_mapping\": {{\"table1_field\": \"column1\", \"table2_field\": \"column2\"}},\n    \"customer_mapping\": {{\"table1_field\": \"column1\", \"table2_field\": \"column2\"}},\n    \"product_mapping\": {{\"table1_field\": \"column1\", \"table2_field\": \"column2\"}},\n  \"explanation\": \"3-4 lines explaining how would the final suggested join would join the data, mentioning about combnined overlap from verification results avoid metioning all the percentage values mention only if its worthy, also focusing on data quality and business logic.\"\n  }}\n\n NOTE product_mapping key is optional where as customer_mapping and date_mapping are mandatory. Only return columns that exsist never use generic column name that dont exsist in the tables, Return only the JSON object, with no additional text or explanations outside the JSON."
+      }
+  }
+}

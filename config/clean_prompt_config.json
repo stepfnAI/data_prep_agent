@@ -1,0 +1,16 @@
+{
+    "clean_suggestions_generator": {
+        "openai": {
+                "system_prompt": "You are a data cleaning expert specializing in identifying data quality issues and suggesting cleaning operations for datasets. Your task is to analyze data and suggest specific cleaning actions.",
+                "user_prompt_template": "Analyze the following dataset information:\nShape: {shape}\nColumns: {columns}\nData types: {dtypes}\nMissing values: {missing_values}\nDuplicate rows: {duplicates}\n\nSuggest specific cleaning operations focusing on:\n1. Missing value handling\n2. Data type corrections\n3. Format standardization\n4. Outlier detection\n5. Inconsistent value handling\n\nProvide each suggestion as a separate item in a numbered list.\nFocus on practical steps to clean and improve the data quality.\nDO NOT DUPLICATE SUGGESTIONS.\nDO NOT PROVIDE HEADINGS.\nONLY PROVIDE A LIST OF SUGGESTIONS separated by '\\n'.\nTRY TO PROVIDE SUGGESTIONS MENTIONING THE COLUMN NAME/S INVOLVED.\nDO NOT PROVIDE GENERIC SUGGESTIONS."
+        },
+        "anthropic": {
+                "system_prompt": "You are Claude, a data cleaning expert specializing in identifying data quality issues and suggesting cleaning operations for datasets.",
+                "user_prompt_template": "Analyze the following dataset information:\nShape: {shape}\nColumns: {columns}\nData types: {dtypes}\nMissing values: {missing_values}\nDuplicate rows: {duplicates}\n\nSuggest specific cleaning operations focusing on:\n1. Missing value handling\n2. Data type corrections\n3. Format standardization\n4. Outlier detection\n5. Inconsistent value handling\n\nProvide each suggestion as a separate item in a numbered list.\nFocus on practical steps to clean and improve the data quality.\nDO NOT DUPLICATE SUGGESTIONS.\nDO NOT PROVIDE HEADINGS.\nONLY PROVIDE A LIST OF SUGGESTIONS separated by '\\n'.\nTRY TO PROVIDE SUGGESTIONS MENTIONING THE COLUMN NAME/S INVOLVED.\nDO NOT PROVIDE GENERIC SUGGESTIONS."
+        },
+        "cortex": {
+                "system_prompt": "You are a data cleaning expert specializing in identifying data quality issues and suggesting cleaning operations for datasets.",
+                "user_prompt_template": "Analyze the following dataset information:\nShape: {shape}\nColumns: {columns}\nData types: {dtypes}\nMissing values: {missing_values}\nDuplicate rows: {duplicates}\n\nSuggest specific cleaning operations focusing on:\n1. Missing value handling\n2. Data type corrections\n3. Format standardization\n4. Outlier detection\n5. Inconsistent value handling\n\nProvide each suggestion as a separate item in a numbered list.\nFocus on practical steps to clean and improve the data quality.\nDO NOT DUPLICATE SUGGESTIONS.\nDO NOT PROVIDE HEADINGS.\nONLY PROVIDE A LIST OF SUGGESTIONS separated by '\\n'.\nTRY TO PROVIDE SUGGESTIONS MENTIONING THE COLUMN NAME/S INVOLVED.\nDO NOT PROVIDE GENERIC SUGGESTIONS."
+        }
+    }
+}

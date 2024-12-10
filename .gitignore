@@ -1,0 +1,9 @@
+myenv
+*.db
+*.db.sqlite3
+*.db.sqlite3-journal
+.pycache__
+*.pyc
+__pycache__/
+*.ipynb
+*.vscode

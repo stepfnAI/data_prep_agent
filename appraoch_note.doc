@@ -1,0 +1,61 @@
+Step1 Data Gathering / preview and basic questionnaire 
+    -Get the data from the user 
+    -Ask user to upload the data and immediately run category identification agent and get it verified from the user
+    -Then give option to add another data set and repeat above step till user clicks on all ‘tables uploaded and proceed to step2’
+    -Ask user about the granularity of the problem statement we want to solve 
+    -Product (its mandatory to have product level data in all uploaded tables in this case)
+    -or Customer(default)
+    
+    -Validation
+    -At least one billing table is must
+    -And at least one from usage or support is must
+    -Then send validation flag as True
+
+    -Step1 output
+        Billing_table:[table1],
+        Usage_table:[table2],
+        Support_table:[table3,table4]
+        problem_statement_level:product/Customer
+        step1_validation:True
+
+
+Step2 data mapping step
+    -Generate mapping suggestion based on uploaded data and its mapping
+    -Get it confirmed from the user with constraint of mandatory mapping fields must be mapped as per category 
+    -above this for all three category tables
+    -Rename the columns with StdCols once confirmed
+
+    -Step2 output
+        mappedBillingData,
+        mappedUsageData,
+        MappedSupportData
+
+
+Step3 data cleaning 
+    -Generate cleaning suggestion for each of the table
+    -Let user select, skip or manually instruct about cleaning step
+    -Repeat for all three category tables
+
+	Step3 output
+        cleanedBillingData,
+        cleanedUsageData,
+        cleanedSupportData
+
+Step4 data aggregation
+    -Based on the problem statement level
+    -Generate aggregation method suggestions and display the explanation for the same
+    -Let user edit it with constrain of allowed methods per data type and confirm
+    -Repeat for all three category tables
+
+	Step4 output
+        aggregatedBillingData,
+        aggregatedUsageData,
+        aggregatedSupportData
+
+
+Step4 data joining
+    -Based on mapped fields
+    -Show join health and get it confirmed from the user
+    -Show columns to select from both the tables
+    -Billing must on left
+    -At least one Usage or support table to join?
