@@ -72,7 +72,7 @@ class SFNColumnMappingAgent(SFNAgent):
             optional_columns=self.standard_columns[category]['optional'],
             category=category
         )
-
+        print(f">>>>>self.model_config: {self.model_config}")
         response = self.client.chat.completions.create(
             model=self.model_config["model"],
             messages=[

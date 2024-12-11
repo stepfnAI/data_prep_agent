@@ -23,7 +23,11 @@ class MainOrchestrator:
     def run(self):
         """Main execution flow"""
         self._display_header()
+        
+        # Run steps based on current progress
         self.run_step1_data_gathering()
+        self.run_step2_data_mapping()
+        
         self._display_summary_and_progress()
 
     def _display_header(self):
@@ -166,27 +170,23 @@ class MainOrchestrator:
 
             granularity = self.view.radio_select(
                 "Analysis Level",  
-                options=["Customer Level", "Product Level (Requires product ID information in all uploaded tables)"],
+                options=["Customer Level", "Product Level"],
                 key="granularity"
             )
+            self.view.display_markdown("**Product Level requires product ID information to be present in all uploaded tables")
 
             if self.view.display_button("Confirm Analysis Level"):
                 if granularity == "Product Level":
-                    # Validate product columns exist
-                    try:
-                        if self.step1_handler.validate_product_columns(uploaded_tables):
-                            self.session.set('problem_level', 'Product Level')
-                            self.session.set('granularity_selected', True)
-                            self.view.rerun_script()
-                    except ValueError as e:
-                        self.view.show_message(str(e), "error")
+                    self.session.set('problem_level', 'Product Level')
+                    self.session.set('granularity_selected', True)
+                    self.view.rerun_script()
                 else:
                     self.session.set('problem_level', 'Customer Level')
                     self.session.set('granularity_selected', True)
                     self.view.rerun_script()
 
             # Show proceed button only after granularity is selected
-            elif self.session.get('granularity_selected'):
+            if self.session.get('granularity_selected'):
                 if self.view.display_button("▶️ Proceed to Next Step", key="proceed_button"):
                     step1_output = {
                         'billing_table': [table['data'] for table in uploaded_tables['billing']],
@@ -198,6 +198,48 @@ class MainOrchestrator:
                     self.session.set('step1_output', step1_output)
                     self.session.set('current_step', 2)
                     self.view.rerun_script()
+
+    def run_step2_data_mapping(self):
+        """Execute Step 2: Data Mapping"""
+        # Skip if not at step 2
+        if self.session.get('current_step', 1) != 2:
+            if self.session.get('current_step', 1) > 2:
+                self._display_step2_completion_summary()
+            return
+
+        # Display header first
+        self.view.display_header("Step 2: Column Mapping")
+
+        # Initialize Step2DataMapping if not exists
+        if not hasattr(self, 'step2_handler'):
+            from step2_data_mapping import Step2DataMapping
+            self.step2_handler = Step2DataMapping(self.session, self.view)
+
+        # Get tables from step 1
+        step1_output = self.session.get('step1_output')
+        if not step1_output:
+            self.view.show_message("❌ Step 1 data not found. Please complete Step 1 first.", "error")
+            return
+
+        # Prepare tables dictionary - Modified to handle multiple files
+        tables = {
+            'billing': step1_output['billing_table'] if step1_output['billing_table'] else None,
+            'usage': step1_output['usage_table'] if step1_output['usage_table'] else None,
+            'support': step1_output['support_table'] if step1_output['support_table'] else None
+        }
+
+        # Process mappings
+        mapped_tables = self.step2_handler.process_mappings(tables)
+
+        # If mappings are complete, proceed to next step
+        if mapped_tables is not None:
+            step2_output = {
+                'mapped_tables': mapped_tables,
+                'step2_validation': True
+            }
+            self.session.set('step2_output', step2_output)
+            self.session.set('current_step', 3)
+            self.view.rerun_script()
 
     def _store_confirmed_table(self, category: str):
         """Helper to store confirmed table and reset processing state"""
@@ -237,6 +279,26 @@ class MainOrchestrator:
                 for idx, table_info in enumerate(table_list, 1):
                     file_entries.append(f"✅ {idx}. {table_info['filename']}\n")
                 summary_msg += ", ".join(file_entries) + "\n"
+        
+        if summary_msg:
+            self.view.show_message(summary_msg.strip(), "success")
+
+    def _display_step2_completion_summary(self):
+        """Display completion summary for Step 2"""
+        # Add header display
+        self.view.display_header("Step 2: Column Mapping")
+        
+        mapped_tables = self.session.get('step2_output', {}).get('mapped_tables', {})
+        
+        summary_msg = "**Column Mapping Summary:**\n\n"
+        for category, dfs in mapped_tables.items():
+            if dfs:  # Check if list is not empty
+                # For each file in the category
+                for idx, df in enumerate(dfs):
+                    if df is not None:
+                        file_identifier = f"{category.title()}_File{idx + 1}" if len(dfs) > 1 else category.title()
+                        summary_msg += f"✅ **{file_identifier}**: {len(df.columns)} columns mapped\n"
+                        summary_msg += f"   Columns: {', '.join(df.columns)}\n\n"
         
         if summary_msg:
             self.view.show_message(summary_msg.strip(), "success")

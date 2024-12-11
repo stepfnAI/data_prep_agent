@@ -6,6 +6,7 @@ from sfn_blueprint import SFNDataLoader, setup_logger, SFNDataPostProcessor
 from agents.category_identification_agent import SFNCategoryIdentificationAgent
 from agents.column_mapping_agent import SFNColumnMappingAgent
 from views.streamlit_views import StreamlitView
+from utils.custom_data_loader import CustomDataLoader
 
 
 def run_app():
@@ -34,7 +35,7 @@ def run_app():
     if uploaded_file is not None:
         if session.get('df') is None:
             with view.display_spinner('Loading data...'):
-                data_loader = SFNDataLoader()
+                data_loader = CustomDataLoader()
                 load_task = Task("Load the uploaded file", data=uploaded_file)
                 df = data_loader.execute_task(load_task)
                 session.set('df', df)

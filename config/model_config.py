@@ -41,12 +41,10 @@ MODEL_CONFIG["category_identifier"] = {
 
 }
 
-MODEL_CONFIG["mapping_column_mapper"] = {
-    "openai": {
+MODEL_CONFIG["column_mapper"] = {
         "model": "gpt-4o-mini",
         "temperature": 0.3,
         "max_tokens": 500,
         "n": 1,
         "stop": None
-    }
 }

@@ -29,7 +29,15 @@ class SFNStreamlitView(SFNStreamlitView):
 
     def display_dataframe(self, df: pd.DataFrame):
         """Display a pandas DataFrame"""
-        st.dataframe(df)
+        # Create a copy to avoid modifying the original DataFrame
+        display_df = df.copy()
+        
+        # If index is not default numeric, add it as a column while preserving the original
+        if not isinstance(display_df.index, pd.RangeIndex):
+            # Reset index but keep it as a column
+            display_df = display_df.reset_index()
+        
+        st.dataframe(display_df)
 
     def file_uploader(self, label: str, key: Optional[str] = None, accepted_types: List[str] = None) -> Any:
         """Create a file uploader"""

@@ -7,14 +7,15 @@ import logging
 # Add the project root directory to Python path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from sfn_blueprint import Task, SFNDataLoader
+from sfn_blueprint import Task
+from utils.custom_data_loader import CustomDataLoader
 from agents.category_identification_agent import SFNCategoryIdentificationAgent
 
 logger = logging.getLogger(__name__)
 
 class Step1DataGathering:
     def __init__(self):
-        self.data_loader = SFNDataLoader()
+        self.data_loader = CustomDataLoader()
         self.category_agent = SFNCategoryIdentificationAgent()
 
     def load_and_identify_category(self, uploaded_file) -> Tuple[pd.DataFrame, str]:
