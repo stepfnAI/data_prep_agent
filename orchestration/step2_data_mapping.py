@@ -46,7 +46,9 @@ class Step2DataMapping:
 
         if all_confirmed:
             self.view.show_message("✅ All files mapped successfully!", "success")
-            return mapped_tables
+            # Add proceed button
+            if self.view.display_button("▶️ Proceed to Next Step", key="proceed_to_step3"):
+                return mapped_tables
             
         return None
 
