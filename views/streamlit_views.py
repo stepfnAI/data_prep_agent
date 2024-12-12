@@ -71,9 +71,18 @@ class SFNStreamlitView(SFNStreamlitView):
         index = 0 if default is None else options.index(default)
         return st.selectbox(label, options, index=index, key=key)
 
-    def checkbox(self, label: str, value: bool = False, key: Optional[str] = None) -> bool:
-        """Create a checkbox"""
-        return st.checkbox(label, value=value, key=key)
+    def checkbox(self, label=None, key=None, value=False, disabled=False, label_visibility="visible"):
+        """Create a checkbox with a default hidden label if none provided"""
+        if label is None or label == "":
+            # Generate a label based on the key if no label is provided
+            label = key if key else "checkbox"
+        return st.checkbox(
+            label=label,
+            key=key,
+            value=value,
+            disabled=disabled,
+            label_visibility=label_visibility
+        )
 
     def create_download_button(self, label: str, data: Any, file_name: str, mime_type: str):
         """Create a download button"""

@@ -289,13 +289,27 @@ class MainOrchestrator:
         # Display header
         self.view.display_header("Step 4: Data Aggregation")
 
+        # Debug prints to check step3 output
+        step3_output = self.session.get('step3_output')
+        print("Step 3 output:", step3_output is not None)
+        if step3_output:
+            print("Cleaned tables structure:")
+            cleaned_tables = step3_output.get('cleaned_tables', {})
+            for category, table_list in cleaned_tables.items():
+                print(f"{category}:")
+                if isinstance(table_list, list):
+                    print(f"  - Number of tables: {len(table_list)}")
+                    for idx, df in enumerate(table_list):
+                        print(f"    Table {idx}: {type(df)} - {df.shape if hasattr(df, 'shape') else 'No shape'}")
+                else:
+                    print(f"  - Unexpected type: {type(table_list)}")
+
         # Initialize Step4DataAggregation if not exists
         if not hasattr(self, 'step4_handler'):
             from step4_data_aggregation import Step4DataAggregation
             self.step4_handler = Step4DataAggregation(self.session, self.view)
 
         # Get cleaned tables from step 3
-        step3_output = self.session.get('step3_output')
         if not step3_output:
             self.view.show_message("❌ Step 3 data not found. Please complete Step 3 first.", "error")
             return
@@ -310,7 +324,7 @@ class MainOrchestrator:
                 'step4_validation': True
             }
             self.session.set('step4_output', step4_output)
-            self.session.set('current_step', 5)
+            self.session.set('current_step', 5)  # Move to final step or completion
             self.view.rerun_script()
 
     def _store_confirmed_table(self, category: str):
@@ -420,16 +434,13 @@ class MainOrchestrator:
                     if df is not None:
                         file_identifier = f"{category.title()}_File{idx + 1}" if len(dfs) > 1 else category.title()
                         
-                        # Get aggregation history for this file
-                        history = self.session.get(f'suggestion_history_{category}_{idx}', [])
-                        applied = len([s for s in history if s['status'] == 'applied'])
-                        failed = len([s for s in history if s['status'] == 'failed'])
-                        skipped = len([s for s in history if s['status'] == 'skipped'])
+                        # Get aggregation methods for this file
+                        methods = self.session.get(f'aggregation_methods_{category}_{idx}', {})
                         
                         summary_msg += f"**{file_identifier}**:\n"
-                        summary_msg += f"- ✅ Successfully applied: {applied}\n"
-                        summary_msg += f"- ❌ Failed: {failed}\n"
-                        summary_msg += f"- ⏭️ Skipped: {skipped}\n"
+                        for col, agg_methods in methods.items():
+                            methods_str = ', '.join(agg_methods)
+                            summary_msg += f"- {col}: {methods_str}\n"
                         summary_msg += f"- 📊 Final shape: {df.shape}\n\n"
         
         if summary_msg:

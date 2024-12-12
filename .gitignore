@@ -7,3 +7,4 @@ myenv
 __pycache__/
 *.ipynb
 *.vscode
+test/test_step4.py

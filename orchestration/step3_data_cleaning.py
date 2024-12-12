@@ -51,6 +51,18 @@ class Step3DataCleaning:
             self.view.show_message("✅ All files cleaned successfully!", "success")
             # Add proceed button
             if self.view.display_button("▶️ Proceed to Next Step", key="proceed_to_step4"):
+                # Debug prints
+                print("Setting step3_output with cleaned tables:")
+                for category, table_list in cleaned_tables.items():
+                    print(f"{category}: {len(table_list)} tables")
+                    for idx, df in enumerate(table_list):
+                        print(f"  Table {idx} shape: {df.shape}")
+                
+                step3_output = {
+                    'cleaned_tables': cleaned_tables,
+                    'step3_validation': True
+                }
+                self.session.set('step3_output', step3_output)
                 return cleaned_tables
             
         return None
