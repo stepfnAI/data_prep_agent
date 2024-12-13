@@ -10,3 +10,4 @@ __pycache__/
 test/test_step4.py
 appraoch_note.doc
 test/test_step5.py
+*.doc
