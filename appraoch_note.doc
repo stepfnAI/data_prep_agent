@@ -53,9 +53,79 @@ Step4 data aggregation
         aggregatedSupportData
 
 
-Step4 data joining
-    -Based on mapped fields
-    -Show join health and get it confirmed from the user
-    -Show columns to select from both the tables
-    -Billing must on left
-    -At least one Usage or support table to join?
+Step5 Data Joining
+
+    1. Intra-Category Join Phase
+        - Check if multiple tables exist within same category
+        - If YES, perform intra-category joins first:
+            - Billing tables: INNER JOIN on (BillingDate, CustomerID, ProductID*)
+            - Usage tables: INNER JOIN on (UsageDate, CustomerID, ProductID*)
+            - Support tables: INNER JOIN on (TicketOpenDate, CustomerID, ProductID*)
+            * ProductID only if Analysis level is product
+        - Result: One consolidated table per category
+
+    2. Inter-Category Join Phase
+        - Always keep Billing as the base (LEFT) table
+        - For joining with other categories:
+            
+            A. Two Category Scenario (Billing + 1 other):
+                - Simple left join with either Usage or Support
+                - Join mappings:
+                    - Dates: BillingDate <--> UsageDate/TicketOpenDate
+                    - Customer: CustomerID <--> CustomerID
+                    - Product: ProductID <--> ProductID (if Product level)
+            
+            B. Three Category Scenario (Billing + Usage + Support):
+                - Interactive Join Order Selection:
+                    1. Display Join Analysis Dashboard:
+                        - For Usage Table:
+                            - Unique Customer Count
+                            - Date Range Coverage
+                            - Overlap with Billing CustomerIDs (%)
+                            - Date Range Overlap with Billing
+                        - For Support Table:
+                            - Unique Customer Count
+                            - Date Range Coverage
+                            - Overlap with Billing CustomerIDs (%)
+                            - Date Range Overlap with Billing
+                    
+                    2. User Selection:
+                        - Let user choose which table to join first based on the metrics
+                        - Options:
+                            "Join Usage First" OR "Join Support First"
+                    
+                    3. Execute Joins Based on Selection:
+                        If "Join Usage First":
+                            1. Billing LEFT JOIN Usage
+                            2. Result LEFT JOIN Support
+                        If "Join Support First":
+                            1. Billing LEFT JOIN Support
+                            2. Result LEFT JOIN Usage
+
+                - Join Health Checks after each join:
+                    - Monitor record counts pre/post join
+                    - Check for data loss percentage
+                    - Verify date range overlaps
+                    - Validate key field matching rates
+
+    3. Post-Join Processing
+        - Handle duplicate column names from joins
+        - Add join metadata columns (optional):
+            - has_usage_data: Boolean
+            - has_support_data: Boolean
+        - Generate join summary report:
+            - Initial record counts
+            - Final record counts
+            - Match rates
+            - Date range coverage
+
+    4. Validation Rules
+        - Ensure no complete data loss after joins
+        - Verify all mandatory fields are present
+        - Check if granularity level is maintained
+        - Validate date alignment across categories
+
+    5. Output
+        - final_joined_table
+        - join_summary_report
+        - validation_status 

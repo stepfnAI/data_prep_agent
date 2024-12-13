@@ -78,8 +78,8 @@ class Step4DataAggregation:
                     return None
                     
                 self.view.show_message("✅ All files aggregated successfully!", "success")
-                # Add proceed button
-                if self.view.display_button("▶️ Complete Pipeline", key="complete_pipeline"):
+                # Change button text from "Complete Pipeline" to "Proceed to Next Step"
+                if self.view.display_button("▶️ Proceed to Next Step", key="proceed_to_step5"):
                     return aggregated_tables
                 
             return None
@@ -126,6 +126,9 @@ class Step4DataAggregation:
         # Always use title case for display
         file_identifier = f"{category.title()}_File{file_idx + 1}" if len(tables[category]) > 1 else category.title()
         
+        # Add subheader for the current file being aggregated - Moved before the analysis
+        self.view.display_subheader(f"Aggregation handling for {file_identifier}")
+        
         # Get aggregation suggestions if not exists
         if not self.session.get(f'aggregation_analysis_{category}_{file_idx}'):
             with self.view.display_spinner('🤖 AI is analyzing aggregation needs...'):
@@ -163,8 +166,7 @@ class Step4DataAggregation:
         print(f"AFTER SESSION: Analysis: {analysis}, Type: {type(analysis)}, ID: {id(analysis)}")
         
         if analysis is not None:  # Changed condition here
-            # Add subheader for the current file being aggregated
-            self.view.display_subheader(f"Aggregation handling for {file_identifier}")
+            # Removed duplicate subheader since it's now at the top
             
             # Check if no aggregation is needed
             if analysis == False:  # Keep using == for comparison
@@ -211,7 +213,7 @@ class Step4DataAggregation:
             
             if valid_suggestions_count > 0:
                 self.view.show_message(
-                    f"🎯 AI suggested aggregation methods for {valid_suggestions_count}/{total_features} features",
+                    f"AI suggested aggregation methods for {valid_suggestions_count}/{total_features} features",
                     "info"
                 )
         
@@ -355,16 +357,20 @@ class Step4DataAggregation:
         
         return None
 
+    def get_mode(self, x):
+        """Get mode of a series, handling empty cases"""
+        return x.mode().iloc[0] if not x.mode().empty else None
+
     def _apply_aggregation(self, df: pd.DataFrame, category: str, selected_methods: Dict) -> pd.DataFrame:
         """Apply the confirmed aggregation methods"""
-        # Get appropriate groupby columns based on category and granularity
-        granularity = self.session.get('problem_level', 'Customer Level')
+        print("\n=== DEBUG: Starting Aggregation ===")
+        print("Input DataFrame columns:", df.columns.tolist())
+        print("\nSelected methods:", selected_methods)
         
-        # Ensure category is lowercase when getting groupby columns
+        granularity = self.session.get('problem_level', 'Customer Level')
         category_lower = category.lower()
         groupby_columns = self.aggregation_agent._get_groupby_columns(category_lower, granularity)
-        
-        final_methods = {}
+        print("\nGroupby columns:", groupby_columns)
         
         # Method mapping for pandas aggregation
         method_map = {
@@ -373,40 +379,61 @@ class Step4DataAggregation:
             'sum': 'sum',
             'mean': 'mean',
             'median': 'median',
-            'mode': lambda x: x.mode().iloc[0] if not x.mode().empty else None,
+            'mode': self.get_mode,  # Use named function instead of lambda
             'nunique': 'nunique',
             'last': 'last'
         }
         
+        # Create the aggregation dictionary for all columns at once
+        agg_dict = {}
         for col, methods in selected_methods.items():
-            dtype_category = DataTypeUtils.classify_dtype(df[col].dtype)
-            processed_methods = []
+            if col not in groupby_columns:  # Skip groupby columns
+                processed_methods = []
+                for method in methods:
+                    processed_method = method_map.get(method, method)
+                    processed_methods.append(processed_method)
+                if processed_methods:
+                    agg_dict[col] = processed_methods
+        
+        print("\nAggregation dictionary:", agg_dict)
+
+        # Perform aggregation for all columns at once
+        if agg_dict:
+            result_df = df.groupby(groupby_columns, as_index=False).agg(agg_dict)
+            print("\nColumns after groupby:", result_df.columns.tolist())
             
-            for method in methods:
-                if dtype_category == 'DATETIME':
-                    if method in ['min', 'max', 'last']:
-                        processed_methods.append(method_map[method])
+            # Clean up the column names
+            new_columns = []
+            for col in result_df.columns:
+                if col in groupby_columns:
+                    new_columns.append(col)  # Keep original name for groupby columns
+                elif isinstance(col, tuple):
+                    col_name, method = col
+                    # Handle lambda functions differently
+                    if callable(method):
+                        method_name = 'mode' if 'mode' in str(method) else 'custom'
+                    else:
+                        method_name = ('unique_count' if method == 'nunique' else method)
+                    new_columns.append(f"{col_name}_{method_name}")
                 else:
-                    processed_methods.append(method_map[method])
-                        
-            final_methods[col] = processed_methods
+                    new_columns.append(col)
+            
+            print("\nFinal column names:", new_columns)
+            result_df.columns = new_columns
+        else:
+            result_df = df[groupby_columns].copy()
         
-        # Apply aggregation using the determined groupby columns
-        aggregated_data = df.groupby(groupby_columns, as_index=False).agg(
-            {col: methods for col, methods in final_methods.items()}
-        )
-        
-        # Clean up column names
-        aggregated_data.columns = self._clean_column_names(aggregated_data.columns, groupby_columns)
-        
-        return aggregated_data
+        return result_df
 
     def _clean_column_names(self, columns, mapping_columns):
         """Clean up column names after aggregation"""
         new_columns = []
+        key_fields = ['CustomerID', 'ProductID', 'BillingDate', 'UsageDate', 'TicketOpenDate']
+        
         for col in columns:
-            if col in mapping_columns:
-                new_columns.append(col)
+            if col in mapping_columns or (isinstance(col, tuple) and col[0] in key_fields):
+                # For key fields, use the original column name without method suffix
+                new_columns.append(col[0] if isinstance(col, tuple) else col)
             else:
                 if isinstance(col, tuple):
                     col_name, method = col

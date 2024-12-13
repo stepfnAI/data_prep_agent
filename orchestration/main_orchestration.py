@@ -29,6 +29,7 @@ class MainOrchestrator:
         self.run_step2_data_mapping()
         self.run_step3_data_cleaning()
         self.run_step4_data_aggregation()
+        self.run_step5_data_joining()
         
         self._display_summary_and_progress()
 
@@ -63,7 +64,7 @@ class MainOrchestrator:
 
         # Display progress
         self.view.display_markdown("---")
-        total_steps = 4
+        total_steps = 5
         current_step = self.session.get('current_step', 1)
         self.view.display_progress_bar((current_step - 1) / total_steps)
         self.view.display_markdown(f"Step {current_step} of {total_steps}")
@@ -324,7 +325,42 @@ class MainOrchestrator:
                 'step4_validation': True
             }
             self.session.set('step4_output', step4_output)
-            self.session.set('current_step', 5)  # Move to final step or completion
+            self.session.set('current_step', 5)  # Move to step 5 (Data Joining)
+            self.view.rerun_script()
+
+    def run_step5_data_joining(self):
+        """Execute Step 5: Data Joining"""
+        # Skip if not at step 5
+        if self.session.get('current_step', 1) != 5:
+            if self.session.get('current_step', 1) > 5:
+                self._display_step5_completion_summary()
+            return
+
+        # Display header
+        self.view.display_header("Step 5: Data Joining")
+
+        # Initialize Step5DataJoining if not exists
+        if not hasattr(self, 'step5_handler'):
+            from step5_data_joining import Step5DataJoining
+            self.step5_handler = Step5DataJoining(self.session, self.view)
+
+        # Get aggregated tables from step 4
+        step4_output = self.session.get('step4_output')
+        if not step4_output:
+            self.view.show_message("❌ Step 4 data not found. Please complete Step 4 first.", "error")
+            return
+
+        # Process joining
+        joined_tables = self.step5_handler.process_joining(step4_output['aggregated_tables'])
+
+        # If joining is complete, proceed to completion
+        if joined_tables is not None:
+            step5_output = {
+                'joined_tables': joined_tables,
+                'step5_validation': True
+            }
+            self.session.set('step5_output', step5_output)
+            self.session.set('current_step', 6)  # Move to next step or completion
             self.view.rerun_script()
 
     def _store_confirmed_table(self, category: str):
@@ -442,6 +478,31 @@ class MainOrchestrator:
                             methods_str = ', '.join(agg_methods)
                             summary_msg += f"- {col}: {methods_str}\n"
                         summary_msg += f"- 📊 Final shape: {df.shape}\n\n"
+        
+        if summary_msg:
+            self.view.show_message(summary_msg.strip(), "success")
+
+    def _display_step5_completion_summary(self):
+        """Display completion summary for Step 5"""
+        # Add header display
+        self.view.display_header("Step 5: Data Joining")
+        
+        joined_tables = self.session.get('step5_output', {}).get('joined_tables', {})
+        
+        summary_msg = "**Data Joining Summary:**\n\n"
+        
+        # Add intra-category join summary
+        summary_msg += "**Intra-Category Joins:**\n"
+        for category in ['billing', 'usage', 'support']:
+            if category in joined_tables:
+                df = joined_tables[category]
+                summary_msg += f"✅ {category.title()}: {len(df)} rows, {len(df.columns)} columns\n"
+        
+        # Add inter-category join summary (will be expanded later)
+        summary_msg += "\n**Final Join Result:**\n"
+        if 'final_table' in joined_tables:
+            final_df = joined_tables['final_table']
+            summary_msg += f"✅ Final table: {len(final_df)} rows, {len(final_df.columns)} columns\n"
         
         if summary_msg:
             self.view.show_message(summary_msg.strip(), "success")
