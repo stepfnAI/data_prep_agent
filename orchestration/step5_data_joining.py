@@ -22,6 +22,10 @@ class Step5DataJoining:
             # Always display current joining status
             self._display_joining_status(tables)
             
+            # If post-processing is started, handle that instead of joins
+            if self.session.get('post_processing_started'):
+                return self._handle_post_processing()
+
             # Step 1: Intra-Category Join Phase
             if not self.session.get('intra_category_joins_completed'):
                 # Display intra-category join explanation
@@ -59,6 +63,40 @@ class Step5DataJoining:
                 
                 return self._handle_inter_category_joins(self.session.get('consolidated_tables'))
 
+            # Step 3: Post-Processing Phase
+            elif self.session.get('inter_category_joins_completed') and self.session.get('join_health_reviewed'):
+                self.view.show_message("🎉 Congratulations! All data joining steps completed successfully!", "success")
+                
+                # Show post-processing options
+                self.view.display_markdown("### Post Processing Options")
+                operation_type = self.view.radio_select(
+                    "Choose an operation:",
+                    ["View Data", "Download Data", "Finish"]
+                )
+
+                final_df = self.session.get('final_joined_table')
+
+                if operation_type == "View Data":
+                    self.view.display_dataframe(final_df)
+                    return {'final_table': final_df}
+                
+                elif operation_type == "Download Data":
+                    csv_data = final_df.to_csv(index=False).encode('utf-8')
+                    self.view.create_download_button(
+                        label="Download CSV",
+                        data=csv_data,
+                        file_name="joined_data.csv",
+                        mime_type="text/csv"
+                    )
+                    return {'final_table': final_df}
+                
+                elif operation_type == "Finish":
+                    if self.view.display_button("Confirm Finish"):
+                        self.view.show_message("✨ Thank you for using the Data Joining Tool!", "success")
+                        self.session.clear()
+                        return None
+                    return {'final_table': final_df}
+
             return None
             
         except Exception as e:
@@ -66,6 +104,30 @@ class Step5DataJoining:
             print("Error:", str(e))
             self.view.show_message(f"❌ Error in join process: {str(e)}", "error")
             return None
+
+    def _standardize_columns(self, df: pd.DataFrame, table_name: str = "table") -> pd.DataFrame:
+        """Standardize column names by removing trailing underscores and handling common variations"""
+        df = df.copy()
+        
+        # Define column name mappings
+        column_mapping = {
+            'CustomerID_': 'CustomerID',
+            'ProductID_': 'ProductID',
+            'BillingDate_': 'BillingDate',
+            'UsageDate_': 'UsageDate',
+            'TicketOpenDate_': 'TicketOpenDate'
+        }
+        
+        print(f"\n{table_name} columns before standardization:", df.columns.tolist())
+        
+        # Apply standardization
+        for old_col, new_col in column_mapping.items():
+            if old_col in df.columns:
+                print(f"Standardizing column name in {table_name}: {old_col} -> {new_col}")
+                df.rename(columns={old_col: new_col}, inplace=True)
+        
+        print(f"{table_name} columns after standardization:", df.columns.tolist())
+        return df
 
     def _handle_intra_category_joins(self, tables: Dict[str, List[pd.DataFrame]]) -> Optional[Dict[str, pd.DataFrame]]:
         """Handle intra-category joins for all categories"""
@@ -85,24 +147,50 @@ class Step5DataJoining:
             print(f"\n=== DEBUG: Processing {current_category.upper()} joins ===")
             print(f"Current consolidated tables: {list(consolidated_tables.keys())}")
             
+            # Standardize column names for all tables in current category
+            standardized_tables = []
+            for i, table in enumerate(tables[current_category]):
+                std_table = self._standardize_columns(table, f"{current_category} table {i+1}")
+                standardized_tables.append(std_table)
+            
+            # Replace original tables with standardized ones
+            tables[current_category] = standardized_tables
+            
+            # Define join keys based on category and analysis level
+            join_keys = ['CustomerID']
+            if self.session.get('problem_level') == 'Product Level':
+                join_keys.append('ProductID')
+            # Add date column based on category
+            join_keys.append(self.date_column_map[current_category])
+            
+            print(f"Join keys for {current_category}: {join_keys}")
+            
             # For single table case
             if len(tables[current_category]) == 1:
-                if self.view.display_button(f"✅ Confirm {current_category.title()} Table and Proceed"):
-                    # Store directly in consolidated_tables and session
+                # Only show confirmation button for categories that need joining
+                if current_category == 'billing' and len(tables['billing']) > 1:
+                    if self.view.display_button(f"✅ Confirm {current_category.title()} Table and Proceed"):
+                        consolidated_tables[current_category] = tables[current_category][0]
+                        self.session.set('consolidated_tables', consolidated_tables)
+                        print(f"Stored {current_category} in session. Current tables: {list(consolidated_tables.keys())}")
+                else:
+                    # For single tables in other categories, just store them
                     consolidated_tables[current_category] = tables[current_category][0]
                     self.session.set('consolidated_tables', consolidated_tables)
                     print(f"Stored {current_category} in session. Current tables: {list(consolidated_tables.keys())}")
-                    
-                    # Move to next category
-                    next_category = next((cat for cat in self.categories if cat > current_category and tables.get(cat)), None)
-                    self.session.set('current_joining_category', next_category)
-                    
-                    if next_category:
-                        return self._handle_intra_category_joins(tables)
-                    else:
-                        self.session.set('intra_category_joins_completed', True)
+                
+                # Move to next category
+                next_category = next((cat for cat in self.categories if cat > current_category and tables.get(cat)), None)
+                self.session.set('current_joining_category', next_category)
+                
+                # If no more categories, show proceed button
+                if next_category is None:
+                    self.session.set('intra_category_joins_completed', True)
+                    if self.view.display_button("✅ Intra-Category Joins Complete - Proceed to Inter-Category Joins"):
                         return consolidated_tables
-                return None
+                    return None
+                
+                return self._handle_intra_category_joins(tables)
 
             # For multiple tables case
             if len(tables[current_category]) > 1:
@@ -110,13 +198,27 @@ class Step5DataJoining:
                 result_df = tables[current_category][0]  # Start with first table
                 print(f"\nStarting intra-category join for {current_category}")
                 print(f"Initial table rows: {len(result_df)}")
+                print(f"Using join keys: {join_keys}")
+                
+                # Verify join keys exist in first table
+                for key in join_keys:
+                    if key not in result_df.columns:
+                        print(f"ERROR: Missing join key '{key}' in first table")
+                        print("Available columns:", result_df.columns.tolist())
+                        raise ValueError(f"Join key '{key}' not found in first {current_category} table")
                 
                 for i in range(1, len(tables[current_category])):
+                    # Verify join keys in second table
+                    second_table = tables[current_category][i]
+                    for key in join_keys:
+                        if key not in second_table.columns:
+                            raise ValueError(f"Join key '{key}' not found in {current_category} table {i+1}")
+                    
                     # Display pre-join stats
                     self._display_join_stats(
                         category=current_category,
                         table1=result_df,
-                        table2=tables[current_category][i],
+                        table2=second_table,
                         result=None,
                         join_type="intra-category"
                     )
@@ -125,42 +227,47 @@ class Step5DataJoining:
                         if self.view.display_button(f"✅ Confirm Join for {current_category.title()} Tables {i} and {i+1}"):
                             result_df = pd.merge(
                                 result_df,
-                                tables[current_category][i],
+                                second_table,
                                 on=join_keys,
                                 how='inner'
                             )
                             self.session.set(f'join_confirmed_{current_category}_{i}', True)
                             
+                            # Store the intermediate result in consolidated_tables and session
+                            consolidated_tables[current_category] = result_df
+                            self.session.set('consolidated_tables', consolidated_tables)
+                            print(f"Stored intermediate {current_category} join result in session")
+                            
                             # Display post-join stats
                             self._display_join_stats(
                                 category=current_category,
                                 table1=result_df,
-                                table2=tables[current_category][i],
+                                table2=second_table,
                                 result=result_df,
                                 join_type="intra-category"
                             )
+                            
+                            # If this was the last join for this category
+                            if i == len(tables[current_category]) - 1:
+                                print(f"Final {current_category} consolidated rows: {len(result_df)}")
+                                # Move to next category
+                                next_category = next((cat for cat in self.categories if cat > current_category and tables.get(cat)), None)
+                                self.session.set('current_joining_category', next_category)
+                                
+                                if next_category:
+                                    return self._handle_intra_category_joins(tables)
+                                else:
+                                    self.session.set('intra_category_joins_completed', True)
+                                    return consolidated_tables
                         return None
-                    else:
-                        result_df = pd.merge(
-                            result_df,
-                            tables[current_category][i],
-                            on=join_keys,
-                            how='inner'
-                        )
-                        print(f"After joining table {i+1}, rows: {len(result_df)}")
-                
-                consolidated_tables[current_category] = result_df
-                print(f"Final {current_category} consolidated rows: {len(result_df)}")
-                
-                # Move to next category
-                next_category = next((cat for cat in self.categories if cat > current_category and tables.get(cat)), None)
-                self.session.set('current_joining_category', next_category)
-                
-                if next_category:
-                    return self._handle_intra_category_joins(tables)
-                else:
-                    self.session.set('intra_category_joins_completed', True)
+
+            # After the last category is processed
+            if next_category is None and consolidated_tables:
+                self.session.set('intra_category_joins_completed', True)
+                # Add confirmation button for inter-category phase
+                if self.view.display_button("✅ Intra-Category Joins Complete - Proceed to Inter-Category Joins"):
                     return consolidated_tables
+                return None
 
             return consolidated_tables
 
@@ -170,25 +277,12 @@ class Step5DataJoining:
             return None
 
     def _handle_inter_category_joins(self, consolidated_tables: Dict[str, pd.DataFrame]) -> Optional[Dict[str, pd.DataFrame]]:
-        """Handle inter-category joins based on user selection"""
         try:
             print("\n=== DEBUG: Starting Inter-Category Joins ===")
+            print("Current state:", {
+                'proceed_to_post_processing': self.session.get('proceed_to_post_processing')
+            })
             
-            # Get stored tables from session
-            consolidated_tables = self.session.get('consolidated_tables', {})
-            print(f"Retrieved consolidated tables from session: {list(consolidated_tables.keys())}")
-            
-            if not consolidated_tables:
-                self.view.show_message("❌ No consolidated tables found in session", "error")
-                return None
-            
-            if 'billing' not in consolidated_tables:
-                self.view.show_message(
-                    f"❌ Billing data is required for inter-category joins. Available tables: {list(consolidated_tables.keys())}", 
-                    "error"
-                )
-                return None
-
             # Get available categories for joining
             available_categories = [cat for cat in ['usage', 'support'] if cat in consolidated_tables]
             print("Available categories for joining:", available_categories)
@@ -197,151 +291,80 @@ class Step5DataJoining:
                 self.view.show_message("❌ At least one usage or support table is required for joining", "error")
                 return None
 
-            # Standardize column names first
-            standardized_tables = {}
-            standardized_tables['billing'] = consolidated_tables['billing'].copy()
-            billing_df = standardized_tables['billing']
-            print(f"\nBilling table shape: {billing_df.shape}")
-            
-            # Display Join Analysis Dashboard
-            self.view.display_markdown("### Join Analysis Dashboard")
-            
-            metrics = {}
-            for category in available_categories:
-                # Create a copy and standardize column names
-                df = consolidated_tables[category].copy()
-                
-                # Standardize key column names
-                key_columns = {
-                    'CustomerID': ['CustomerID', 'CustomerID_'],
-                    'ProductID': ['ProductID', 'ProductID_'],
-                    self.date_column_map[category]: [self.date_column_map[category], f"{self.date_column_map[category]}_"]
-                }
-                
-                for std_name, variations in key_columns.items():
-                    for var in variations:
-                        if var in df.columns and var != std_name:
-                            print(f"Standardizing column name: {var} -> {std_name}")
-                            df.rename(columns={var: std_name}, inplace=True)
-                
-                standardized_tables[category] = df
-                print(f"\n{category.title()} table shape: {df.shape}")
-                
-                # Calculate metrics
-                customer_overlap = len(set(df['CustomerID'].astype(str)) & set(billing_df['CustomerID'].astype(str)))
-                customer_overlap_pct = (customer_overlap / len(billing_df['CustomerID'])) * 100
-                
-                date_col = self.date_column_map[category]
-                date_range = f"{pd.to_datetime(df[date_col]).min().strftime('%Y-%m-%d')} to {pd.to_datetime(df[date_col]).max().strftime('%Y-%m-%d')}"
-                
-                metrics[category] = {
-                    'Unique Customers': len(df['CustomerID'].unique()),
-                    'Date Range': date_range,
-                    'Customer Overlap': f"{customer_overlap_pct:.1f}%",
-                    'Records': len(df)
-                }
-                print(f"{category.title()} metrics:", metrics[category])
-
-            # Display metrics
-            for category, category_metrics in metrics.items():
-                self.view.display_markdown(f"\n**{category.title()} Table Metrics:**")
-                for metric, value in category_metrics.items():
-                    self.view.display_markdown(f"- {metric}: {value}")
-
-            # If both usage and support are available, let user choose join order
-            if len(available_categories) > 1:
-                self.view.display_markdown("\n### Select Join Order")
-                join_order = self.view.radio_select(
-                    "Which table would you like to join first?",
-                    options=["Join Usage First", "Join Support First"]
-                )
-                
-                if not join_order:
-                    return None  # Wait for selection
-                    
-                self.session.set('selected_join_order', join_order)
-                
-            # Perform the joins
-            result_df = billing_df.copy()
-            print("\nStarting joins with base billing table")
-            
+            # For single category join
             if len(available_categories) == 1:
-                # Simple two-table join
                 category = available_categories[0]
                 print(f"\nPerforming single join with {category}")
-                result_df = self._perform_category_join(result_df, standardized_tables[category], category)
                 
-            else:
-                # Three-table join based on selected order
-                first_category = 'usage' if self.session.get('selected_join_order') == "Join Usage First" else 'support'
-                second_category = 'support' if first_category == 'usage' else 'usage'
+                # Initialize billing_df first
+                billing_df = consolidated_tables['billing'].copy()
                 
-                print(f"\nJoin order: {first_category} then {second_category}")
-                # First join
-                result_df = self._perform_category_join(result_df, standardized_tables[first_category], first_category)
-                # Second join
-                result_df = self._perform_category_join(result_df, standardized_tables[second_category], second_category)
+                # Standardize and perform join
+                result_df = self._perform_category_join(billing_df, consolidated_tables[category], category)
+                
+                # Add metadata columns
+                result_df['has_usage_data'] = False
+                result_df['has_support_data'] = False
+                result_df[f'has_{category}_data'] = True
+                
+                print("\n=== DEBUG: Join Complete ===")
+                print("Result shape:", result_df.shape)
+                
+                # Store result
+                self.session.set('final_joined_table', result_df)
+                
+                # Display final join summary
+                self.view.display_markdown("### Final Join Summary")
+                self.view.display_markdown(f"- Total Records: {len(result_df)}")
+                self.view.display_markdown(f"- Total Features: {len(result_df.columns)}")
+                self.view.display_markdown(f"- Customers with {category} Data: {result_df[f'has_{category}_data'].sum()}")
 
-            # Add join metadata columns
-            print("\nAdding metadata columns")
-            result_df['has_usage_data'] = False
-            result_df['has_support_data'] = False
-            
-            if 'usage' in standardized_tables:
-                result_df['has_usage_data'] = result_df['CustomerID'].isin(standardized_tables['usage']['CustomerID'])
-            if 'support' in standardized_tables:
-                result_df['has_support_data'] = result_df['CustomerID'].isin(standardized_tables['support']['CustomerID'])
+                # If already in post-processing, just return the result
+                if self.session.get('proceed_to_post_processing'):
+                    return {'final_table': result_df}
 
-            # Display final join summary
-            self.view.display_markdown("### Final Join Summary")
-            self.view.display_markdown(f"- Total Records: {len(result_df)}")
-            self.view.display_markdown(f"- Total Features: {len(result_df.columns)}")
-            self.view.display_markdown(f"- Customers with Usage Data: {result_df['has_usage_data'].sum()}")
-            self.view.display_markdown(f"- Customers with Support Data: {result_df['has_support_data'].sum()}")
+                # Show proceed button if not in post-processing
+                if self.view.display_button("✅ Proceed to Post-Processing"):
+                    print("\n=== DEBUG: Post-Processing Button Clicked ===")
+                    self.session.set('proceed_to_post_processing', True)
+                    return {'final_table': result_df}
+                
+                # Return the result even if button not clicked
+                return {'final_table': result_df}
 
-            print("\n=== DEBUG: Join Process Completed ===")
-            print(f"Final table shape: {result_df.shape}")
-            print("Final columns:", result_df.columns.tolist())
-
-            self.session.set('final_joined_table', result_df)
-            self.session.set('inter_category_joins_completed', True)
-            
-            return {'final_table': result_df}
+            # ... rest of the code for multiple categories ...
 
         except Exception as e:
-            print("\n=== DEBUG: Error in inter-category joins ===")
-            print("Error:", str(e))
-            print("Available tables:", list(consolidated_tables.keys()))
-            for category, df in consolidated_tables.items():
-                print(f"\n{category.title()} table:")
-                print("Shape:", df.shape)
-                print("Columns:", df.columns.tolist())
-            self.view.show_message(f"❌ Error in inter-category joins: {str(e)}", "error")
+            print(f"Error in _handle_inter_category_joins: {str(e)}")
+            self.view.show_message(f"❌ Error in joins: {str(e)}", "error")
             return None
 
     def _perform_category_join(self, base_df: pd.DataFrame, join_df: pd.DataFrame, category: str) -> pd.DataFrame:
         """Perform join between base table and a category table"""
         try:
+            # Define join keys - must include CustomerID, ProductID (if product level), and date mapping
             join_keys = ['CustomerID']
             if self.session.get('problem_level') == 'Product Level':
                 join_keys.append('ProductID')
+                # Ensure ProductID is of same type in both dataframes
+                if 'ProductID' in base_df.columns and 'ProductID' in join_df.columns:
+                    base_df['ProductID'] = base_df['ProductID'].astype(str)
+                    join_df['ProductID'] = join_df['ProductID'].astype(str)
             
             print(f"\n=== DEBUG: Joining {category.upper()} ===")
             print(f"Base table shape before join: {base_df.shape}")
             print(f"Join table shape: {join_df.shape}")
-            print(f"Join keys to use: {join_keys}")
             
-            # Create a copy of join_df to modify
+            # Handle date column mapping for inter-category joins
+            base_date_col = 'BillingDate'  # Base table is always billing
+            join_date_col = self.date_column_map[category]  # Get corresponding date column for category
+            
+            # Rename the date column in join_df to match billing date for the join
             join_df = join_df.copy()
+            join_df.rename(columns={join_date_col: base_date_col}, inplace=True)
+            join_keys.append(base_date_col)
             
-            # Handle underscore variations in join keys
-            for key in join_keys:
-                if f"{key}_" in join_df.columns:
-                    print(f"Renaming {key}_ to {key} in join table")
-                    join_df.rename(columns={f"{key}_": key}, inplace=True)
-                
-                if key not in base_df.columns or key not in join_df.columns:
-                    raise ValueError(f"Join key {key} missing in {'base' if key not in base_df.columns else 'join'} table")
+            print(f"Join keys to use: {join_keys}")
             
             # Perform the join
             result_df = pd.merge(
@@ -425,3 +448,37 @@ class Step5DataJoining:
                     stats_msg += f"\nUnique Products: {result['ProductID'].nunique()}"
             
             self.view.show_message(stats_msg, "info")
+
+    def _handle_post_processing(self) -> Optional[Dict[str, pd.DataFrame]]:
+        """Handle post-processing options after joins are complete"""
+        final_df = self.session.get('final_joined_table')
+        
+        self.view.show_message("🎉 All data joining steps completed successfully!", "success")
+        
+        # Show post-processing options
+        self.view.display_markdown("### Post Processing Options")
+        operation_type = self.view.radio_select(
+            "Choose an operation:",
+            ["View Data", "Download Data", "Finish"]
+        )
+
+        if operation_type == "View Data":
+            self.view.display_dataframe(final_df)
+            return {'final_table': final_df}
+        
+        elif operation_type == "Download Data":
+            csv_data = final_df.to_csv(index=False).encode('utf-8')
+            self.view.create_download_button(
+                label="Download CSV",
+                data=csv_data,
+                file_name="joined_data.csv",
+                mime_type="text/csv"
+            )
+            return {'final_table': final_df}
+        
+        elif operation_type == "Finish":
+            if self.view.display_button("Confirm Finish"):
+                self.view.show_message("✨ Thank you for using the Data Joining Tool!", "success")
+                self.session.clear()
+                return None
+            return {'final_table': final_df}

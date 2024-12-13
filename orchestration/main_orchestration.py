@@ -62,12 +62,13 @@ class MainOrchestrator:
             
             self.view.show_message(summary_msg.strip(), "info")
 
-        # Display progress
-        self.view.display_markdown("---")
-        total_steps = 5
-        current_step = self.session.get('current_step', 1)
-        self.view.display_progress_bar((current_step - 1) / total_steps)
-        self.view.display_markdown(f"Step {current_step} of {total_steps}")
+        # Display progress only if not completed
+        if not self.session.get('inter_category_joins_completed'):
+            self.view.display_markdown("---")
+            total_steps = 5
+            current_step = min(self.session.get('current_step', 1), total_steps)  # Cap at 5
+            self.view.display_progress_bar((current_step - 1) / total_steps)
+            self.view.display_markdown(f"Step {current_step} of {total_steps}")
 
     def run_step1_data_gathering(self):
         """Execute Step 1: Data Gathering"""
@@ -339,6 +340,12 @@ class MainOrchestrator:
         # Display header
         self.view.display_header("Step 5: Data Joining")
 
+        print("\n=== DEBUG: Step 5 Execution ===")
+        print("Current state:", {
+            'current_step': self.session.get('current_step'),
+            'proceed_to_post_processing': self.session.get('proceed_to_post_processing')
+        })
+
         # Initialize Step5DataJoining if not exists
         if not hasattr(self, 'step5_handler'):
             from step5_data_joining import Step5DataJoining
@@ -352,16 +359,20 @@ class MainOrchestrator:
 
         # Process joining
         joined_tables = self.step5_handler.process_joining(step4_output['aggregated_tables'])
+        
+        print("\n=== DEBUG: After process_joining ===")
+        print("Joined tables returned:", joined_tables is not None)
+        print("Proceed to post processing:", self.session.get('proceed_to_post_processing'))
 
-        # If joining is complete, proceed to completion
         if joined_tables is not None:
-            step5_output = {
-                'joined_tables': joined_tables,
-                'step5_validation': True
-            }
-            self.session.set('step5_output', step5_output)
-            self.session.set('current_step', 6)  # Move to next step or completion
-            self.view.rerun_script()
+            if self.session.get('proceed_to_post_processing'):
+                # Handle post-processing options
+                print("\n=== DEBUG: Handling post-processing options ===")
+                result = self.step5_handler._handle_post_processing()
+                if result is None:
+                    print("Post-processing complete, moving to step 6")
+                    self.session.set('current_step', 6)
+                    self.view.rerun_script()
 
     def _store_confirmed_table(self, category: str):
         """Helper to store confirmed table and reset processing state"""
