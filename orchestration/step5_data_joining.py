@@ -22,16 +22,6 @@ class Step5DataJoining:
             # Always display current joining status
             self._display_joining_status(tables)
             
-            # Debug print for incoming tables
-            print("\n=== DEBUG: Incoming Tables Structure ===")
-            for category, table_list in tables.items():
-                print(f"\n{category.upper()} TABLES:")
-                for idx, df in enumerate(table_list):
-                    print(f"Table {idx + 1}:")
-                    print("Rows:", len(df))
-                    print("Columns:", df.columns.tolist())
-                    print("-" * 50)
-
             # Step 1: Intra-Category Join Phase
             if not self.session.get('intra_category_joins_completed'):
                 # Display intra-category join explanation
@@ -77,87 +67,47 @@ class Step5DataJoining:
             self.view.show_message(f"❌ Error in join process: {str(e)}", "error")
             return None
 
-    def _handle_intra_category_joins(self, tables: Dict[str, List[pd.DataFrame]]) -> Optional[Dict[str, Dict[str, pd.DataFrame]]]:
+    def _handle_intra_category_joins(self, tables: Dict[str, List[pd.DataFrame]]) -> Optional[Dict[str, pd.DataFrame]]:
         """Handle intra-category joins for all categories"""
-        # Get stored consolidated tables or initialize new dict
-        consolidated_tables = self.session.get('consolidated_tables', {})
-        
-        # Get current category being processed
-        current_category = self.session.get('current_joining_category')
-        if not current_category:
-            # Always start with billing
-            current_category = 'billing' if 'billing' in tables else None
-            self.session.set('current_joining_category', current_category)
-        
-        if not current_category:
-            return None
-        
-        print(f"Processing {current_category.upper()} joins")
-        
-        # Process current category
-        if not tables.get(current_category):
-            # Move to next category in specific order: billing -> usage -> support
-            category_order = ['billing', 'usage', 'support']
-            current_idx = category_order.index(current_category)
-            next_category = None
+        try:
+            # Initialize consolidated_tables from session if it exists
+            consolidated_tables = self.session.get('consolidated_tables', {})
             
-            for cat in category_order[current_idx + 1:]:
-                if cat in tables:
-                    next_category = cat
-                    break
+            # Get current category being processed
+            current_category = self.session.get('current_joining_category')
+            if not current_category:
+                current_category = 'billing' if 'billing' in tables else None
+                self.session.set('current_joining_category', current_category)
             
-            if next_category:
-                self.session.set('current_joining_category', next_category)
-                return self._handle_intra_category_joins(tables)
-            else:
-                # All categories processed
-                self.session.set('intra_category_joins_completed', True)
-                return consolidated_tables
-
-        # Standardize column names for current category
-        for idx, df in enumerate(tables[current_category]):
-            print(f"Table {idx + 1}: {len(df)} records, {len(df.columns)} columns")  # Simplified debug output
-            df.columns = [col[:-1] if col.endswith('_') else col for col in df.columns]
-            tables[current_category][idx] = df
-
-        # If only one table, show stats and ask for confirmation
-        if len(tables[current_category]) == 1:
-            self._display_join_stats(
-                category=current_category,
-                table1=tables[current_category][0],
-                table2=None,
-                result=tables[current_category][0]
-            )
+            if not current_category:
+                return None
             
-            if self.view.display_button(f"✅ Confirm {current_category.title()} Table and Proceed"):
-                consolidated_tables[current_category] = tables[current_category][0]
-                self.session.set('consolidated_tables', consolidated_tables)  # Store in session
-                self.session.set(f'{current_category}_intra_join_completed', True)
-                
-                # Move to next category
-                next_category = next((cat for cat in category_order[current_idx + 1:] if cat in tables), None)
-                self.session.set('current_joining_category', next_category)
-                return self._handle_intra_category_joins(tables)
-            return None
+            print(f"\n=== DEBUG: Processing {current_category.upper()} joins ===")
+            print(f"Current consolidated tables: {list(consolidated_tables.keys())}")
+            
+            # For single table case
+            if len(tables[current_category]) == 1:
+                if self.view.display_button(f"✅ Confirm {current_category.title()} Table and Proceed"):
+                    # Store directly in consolidated_tables and session
+                    consolidated_tables[current_category] = tables[current_category][0]
+                    self.session.set('consolidated_tables', consolidated_tables)
+                    print(f"Stored {current_category} in session. Current tables: {list(consolidated_tables.keys())}")
+                    
+                    # Move to next category
+                    next_category = next((cat for cat in self.categories if cat > current_category and tables.get(cat)), None)
+                    self.session.set('current_joining_category', next_category)
+                    
+                    if next_category:
+                        return self._handle_intra_category_joins(tables)
+                    else:
+                        self.session.set('intra_category_joins_completed', True)
+                        return consolidated_tables
+                return None
 
-        # For multiple tables, handle join
-        if len(tables[current_category]) > 1:
-            try:
-                # Get join keys
-                join_keys = ['CustomerID']
-                if self.session.get('problem_level') == 'Product Level':
-                    join_keys.append('ProductID')
-                date_column = self.date_column_map[current_category]
-                join_keys.append(date_column)
-                
-                # Validate join keys
-                for df in tables[current_category]:
-                    missing_keys = [key for key in join_keys if key not in df.columns]
-                    if missing_keys:
-                        raise ValueError(f"Missing join keys in {current_category} table: {missing_keys}")
-                
-                # Perform joins
-                result_df = tables[current_category][0]
+            # For multiple tables case
+            if len(tables[current_category]) > 1:
+                # After successful join of multiple tables
+                result_df = tables[current_category][0]  # Start with first table
                 print(f"\nStarting intra-category join for {current_category}")
                 print(f"Initial table rows: {len(result_df)}")
                 
@@ -197,16 +147,13 @@ class Step5DataJoining:
                             on=join_keys,
                             how='inner'
                         )
-                    print(f"After joining table {i+1}, rows: {len(result_df)}")
+                        print(f"After joining table {i+1}, rows: {len(result_df)}")
                 
                 consolidated_tables[current_category] = result_df
-                self.session.set('consolidated_tables', consolidated_tables)  # Store in session
-                self.session.set(f'{current_category}_intra_join_completed', True)
-                
                 print(f"Final {current_category} consolidated rows: {len(result_df)}")
                 
                 # Move to next category
-                next_category = next((cat for cat in category_order[current_idx + 1:] if cat in tables), None)
+                next_category = next((cat for cat in self.categories if cat > current_category and tables.get(cat)), None)
                 self.session.set('current_joining_category', next_category)
                 
                 if next_category:
@@ -215,25 +162,31 @@ class Step5DataJoining:
                     self.session.set('intra_category_joins_completed', True)
                     return consolidated_tables
 
-            except Exception as e:
-                print(f"Error joining {current_category} tables:", str(e))
-                self.view.show_message(f"❌ Error joining {current_category} tables: {str(e)}", "error")
-                return None
+            return consolidated_tables
 
-        return consolidated_tables
+        except Exception as e:
+            print(f"Error in _handle_intra_category_joins: {str(e)}")
+            self.view.show_message(f"❌ Error processing {current_category}: {str(e)}", "error")
+            return None
 
     def _handle_inter_category_joins(self, consolidated_tables: Dict[str, pd.DataFrame]) -> Optional[Dict[str, pd.DataFrame]]:
         """Handle inter-category joins based on user selection"""
         try:
-            print("Starting Inter-Category Joins")
+            print("\n=== DEBUG: Starting Inter-Category Joins ===")
             
-            # Get stored consolidated tables
+            # Get stored tables from session
             consolidated_tables = self.session.get('consolidated_tables', {})
-            print(f"Available tables: {list(consolidated_tables.keys())}")
+            print(f"Retrieved consolidated tables from session: {list(consolidated_tables.keys())}")
             
-            # Verify we have billing data (required)
+            if not consolidated_tables:
+                self.view.show_message("❌ No consolidated tables found in session", "error")
+                return None
+            
             if 'billing' not in consolidated_tables:
-                self.view.show_message("❌ Billing data is required for inter-category joins", "error")
+                self.view.show_message(
+                    f"❌ Billing data is required for inter-category joins. Available tables: {list(consolidated_tables.keys())}", 
+                    "error"
+                )
                 return None
 
             # Get available categories for joining
