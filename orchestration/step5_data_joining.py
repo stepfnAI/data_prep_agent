@@ -24,8 +24,9 @@ class Step5DataJoining:
             self._display_joining_status(tables)
             
             # If post-processing is started, handle that instead of joins
-            if self.session.get('proceed_to_post_processing'):
-                return self._handle_post_processing()
+            if not self.session.get('post_processing_completed'):
+                if self.session.get('proceed_to_post_processing'):
+                    return self._handle_post_processing()
 
             # Check if we have single table per category case
             is_single_table_case = all(len(tables.get(cat, [])) == 1 for cat in self.categories if cat in tables)
@@ -481,7 +482,7 @@ class Step5DataJoining:
     def _handle_post_processing(self) -> Optional[Dict[str, pd.DataFrame]]:
         """Handle post-processing options after joins are complete"""
         final_df = self.session.get('final_joined_table')
-        
+        self.session.set('post_processing_completed', True)
         # Always show success message at top
         self.view.show_message("🎉 All data joining steps completed successfully!", "success")
         
