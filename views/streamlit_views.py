@@ -62,9 +62,23 @@ class SFNStreamlitView(SFNStreamlitView):
         """Create a button and return its clicked state"""
         return st.button(label, key=key)
 
-    def radio_select(self, label: str, options: List[str], key: Optional[str] = None) -> str:
+    def radio_select(self, label: str, options: List[str], key: str = None) -> str:
         """Create a radio button selection"""
-        return st.radio(label, options, key=key)
+        # Create a unique session state key for this radio
+        if key not in st.session_state:
+            st.session_state[key] = options[0]  # Default to first option
+        
+        # Use the session state value
+        value = st.radio(
+            label,
+            options,
+            key=key,
+            index=options.index(st.session_state[key])
+        )
+        
+        # Update session state
+        st.session_state[key] = value
+        return value
 
     def select_box(self, label: str, options: List[str], key: Optional[str] = None, default: Optional[str] = None) -> str:
         """Create a select box"""

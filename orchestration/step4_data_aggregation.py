@@ -204,11 +204,15 @@ class Step4DataAggregation:
         """Show aggregation method selection interface and return selected methods"""
         # Display header with current file info
         file_identifier = f"{category.title()}_File{file_idx + 1}" if len(self.session.get('step3_output', {}).get('cleaned_tables', {}).get(category.lower(), [])) > 1 else f"{category.title()} Table"
-        # self.view.display_subheader(f"🔄 Handling Aggregations for {file_identifier}")
+        
+        # Get the groupby columns based on category and granularity
+        granularity = self.session.get('problem_level', 'Customer Level')
+        groupby_columns = self.aggregation_agent._get_groupby_columns(category.lower(), granularity)
         
         # Show AI suggestion stats
         if analysis:
-            total_features = len([col for col in df.columns if col not in mapping_columns])
+            # Calculate total features excluding groupby columns
+            total_features = len([col for col in df.columns if col not in mapping_columns and col not in groupby_columns])
             valid_suggestions_count = len([feature for feature, suggestions in analysis.items() if suggestions])
             
             if valid_suggestions_count > 0:
@@ -218,10 +222,6 @@ class Step4DataAggregation:
                 )
         
         self.view.display_markdown("Select aggregation methods for each feature:")
-        
-        # Get the groupby columns based on category and granularity
-        granularity = self.session.get('problem_level', 'Customer Level')
-        groupby_columns = self.aggregation_agent._get_groupby_columns(category.lower(), granularity)
         
         # Create DataFrame for aggregation methods
         method_names = ['Min', 'Max', 'Sum', 'Unique Count', 'Mean', 'Median', 'Mode', 'Last Value']

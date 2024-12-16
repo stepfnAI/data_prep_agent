@@ -1,6 +1,7 @@
 from typing import Dict, List, Optional
 import pandas as pd
 import logging
+import time
 
 logger = logging.getLogger(__name__)
 
@@ -23,12 +24,39 @@ class Step5DataJoining:
             self._display_joining_status(tables)
             
             # If post-processing is started, handle that instead of joins
-            if self.session.get('post_processing_started'):
+            if self.session.get('proceed_to_post_processing'):
                 return self._handle_post_processing()
 
-            # Step 1: Intra-Category Join Phase
+            # Check if we have single table per category case
+            is_single_table_case = all(len(tables.get(cat, [])) == 1 for cat in self.categories if cat in tables)
+            
+            # Step 1: Handle Single Table Per Category Case
+            if is_single_table_case and not self.session.get('intra_category_joins_completed'):
+                self.view.display_markdown("### Data Joining Phase")
+                self.view.show_message(
+                    "Each category has a single table. We can proceed directly to joining across categories.", 
+                    "info"
+                )
+                
+                # Create consolidated tables directly
+                consolidated_tables = {}
+                for category in self.categories:
+                    if category in tables:
+                        consolidated_tables[category] = self._standardize_columns(tables[category][0], f"{category} table")
+                
+                # Show stats for each table
+                for category, df in consolidated_tables.items():
+                    self._display_join_stats(category, df)
+                
+                # Add proceed button for better user control
+                if self.view.display_button("✅ Proceed to Inter-Category Joins"):
+                    self.session.set('consolidated_tables', consolidated_tables)
+                    self.session.set('intra_category_joins_completed', True)
+                    return self._handle_inter_category_joins(consolidated_tables)
+                return None
+
+            # Step 1: Intra-Category Join Phase (for multiple tables case)
             if not self.session.get('intra_category_joins_completed'):
-                # Display intra-category join explanation
                 self.view.display_markdown("### Intra-Category Join Phase")
                 self.view.show_message(
                     "In this phase, we'll join multiple tables within each category (billing, usage, support) "
@@ -38,19 +66,8 @@ class Step5DataJoining:
                 consolidated_tables = self._handle_intra_category_joins(tables)
                 if consolidated_tables is None:
                     return None
-                
-                print("\n=== DEBUG: Intra-Category Join Results ===")
-                for category, df in consolidated_tables.items():
-                    print(f"\n{category.upper()} JOIN RESULTS:")
-                    print(f"Final Row Count: {len(df)}")
-                    print(f"Final Column Count: {len(df.columns)}")
-                    print("Join Keys Present:", all(key in df.columns for key in ['CustomerID', 'ProductID', self.date_column_map[category]]))
-                    print("Sample CustomerIDs:", df['CustomerID'].head().tolist())
-                    print("-" * 50)
-                
-                self.session.set('consolidated_tables', consolidated_tables)
-                self.session.set('intra_category_joins_completed', True)
-                self.view.rerun_script()
+
+                return self._handle_inter_category_joins(consolidated_tables)
 
             # Step 2: Inter-Category Join Phase
             elif not self.session.get('inter_category_joins_completed'):
@@ -62,40 +79,6 @@ class Step5DataJoining:
                 )
                 
                 return self._handle_inter_category_joins(self.session.get('consolidated_tables'))
-
-            # Step 3: Post-Processing Phase
-            elif self.session.get('inter_category_joins_completed') and self.session.get('join_health_reviewed'):
-                self.view.show_message("🎉 Congratulations! All data joining steps completed successfully!", "success")
-                
-                # Show post-processing options
-                self.view.display_markdown("### Post Processing Options")
-                operation_type = self.view.radio_select(
-                    "Choose an operation:",
-                    ["View Data", "Download Data", "Finish"]
-                )
-
-                final_df = self.session.get('final_joined_table')
-
-                if operation_type == "View Data":
-                    self.view.display_dataframe(final_df)
-                    return {'final_table': final_df}
-                
-                elif operation_type == "Download Data":
-                    csv_data = final_df.to_csv(index=False).encode('utf-8')
-                    self.view.create_download_button(
-                        label="Download CSV",
-                        data=csv_data,
-                        file_name="joined_data.csv",
-                        mime_type="text/csv"
-                    )
-                    return {'final_table': final_df}
-                
-                elif operation_type == "Finish":
-                    if self.view.display_button("Confirm Finish"):
-                        self.view.show_message("✨ Thank you for using the Data Joining Tool!", "success")
-                        self.session.clear()
-                        return None
-                    return {'final_table': final_df}
 
             return None
             
@@ -278,10 +261,7 @@ class Step5DataJoining:
 
     def _handle_inter_category_joins(self, consolidated_tables: Dict[str, pd.DataFrame]) -> Optional[Dict[str, pd.DataFrame]]:
         try:
-            print("\n=== DEBUG: Starting Inter-Category Joins ===")
-            print("Current state:", {
-                'proceed_to_post_processing': self.session.get('proceed_to_post_processing')
-            })
+
             
             # Get available categories for joining
             available_categories = [cat for cat in ['usage', 'support'] if cat in consolidated_tables]
@@ -291,52 +271,96 @@ class Step5DataJoining:
                 self.view.show_message("❌ At least one usage or support table is required for joining", "error")
                 return None
 
-            # For single category join
-            if len(available_categories) == 1:
-                category = available_categories[0]
-                print(f"\nPerforming single join with {category}")
-                
-                # Initialize billing_df first
-                billing_df = consolidated_tables['billing'].copy()
-                
-                # Standardize and perform join
-                result_df = self._perform_category_join(billing_df, consolidated_tables[category], category)
-                
-                # Add metadata columns
-                result_df['has_usage_data'] = False
-                result_df['has_support_data'] = False
-                result_df[f'has_{category}_data'] = True
-                
-                print("\n=== DEBUG: Join Complete ===")
-                print("Result shape:", result_df.shape)
-                
-                # Store result
-                self.session.set('final_joined_table', result_df)
-                
-                # Display final join summary
-                self.view.display_markdown("### Final Join Summary")
-                self.view.display_markdown(f"- Total Records: {len(result_df)}")
-                self.view.display_markdown(f"- Total Features: {len(result_df.columns)}")
-                self.view.display_markdown(f"- Customers with {category} Data: {result_df[f'has_{category}_data'].sum()}")
+            # Special handling for three-way join (billing + usage + support)
+            if len(available_categories) == 2:
+                return self._handle_three_way_join(consolidated_tables)
 
-                # If already in post-processing, just return the result
-                if self.session.get('proceed_to_post_processing'):
-                    return {'final_table': result_df}
-
-                # Show proceed button if not in post-processing
-                if self.view.display_button("✅ Proceed to Post-Processing"):
-                    print("\n=== DEBUG: Post-Processing Button Clicked ===")
-                    self.session.set('proceed_to_post_processing', True)
-                    return {'final_table': result_df}
-                
-                # Return the result even if button not clicked
+            # For single category join (existing logic...)
+            category = available_categories[0]
+            print(f"\nPerforming single join with {category}")
+            
+            billing_df = consolidated_tables['billing'].copy()
+            result_df = self._perform_category_join(billing_df, consolidated_tables[category], category)
+        
+            
+            self.session.set('final_joined_table', result_df)
+            
+            # Display final join summary
+            self._display_final_join_summary(result_df, [category])
+            
+            if self.view.display_button("✅ Proceed to Post-Processing"):
+                self.session.set('proceed_to_post_processing', True)
                 return {'final_table': result_df}
-
-            # ... rest of the code for multiple categories ...
+            
+            return {'final_table': result_df}
 
         except Exception as e:
             print(f"Error in _handle_inter_category_joins: {str(e)}")
             self.view.show_message(f"❌ Error in joins: {str(e)}", "error")
+            return None
+
+    def _handle_three_way_join(self, consolidated_tables: Dict[str, pd.DataFrame]) -> Optional[Dict[str, pd.DataFrame]]:
+        """Handle joining of all three categories (billing, usage, and support)"""
+        try:
+            billing_df = consolidated_tables['billing']
+            usage_df = consolidated_tables['usage']
+            support_df = consolidated_tables['support']
+            
+            # Display joining information
+            self.view.display_markdown("### Three-Way Join")
+            self.view.show_message(
+                "Joining billing data with both usage and support data using left joins.", 
+                "info"
+            )
+            
+            # Display pre-join statistics
+            stats_msg = "**Pre-Join Statistics:**\n\n"
+            stats_msg += "**Billing Table (Base):**\n"
+            stats_msg += f"- Records: {len(billing_df):,}\n"
+            stats_msg += f"- Unique Customers: {billing_df['CustomerID'].nunique():,}\n"
+            if 'ProductID' in billing_df.columns:
+                stats_msg += f"- Unique Products: {billing_df['ProductID'].nunique():,}\n"
+            
+            stats_msg += "\n**Usage Table:**\n"
+            stats_msg += f"- Records: {len(usage_df):,}\n"
+            stats_msg += f"- Unique Customers: {usage_df['CustomerID'].nunique():,}\n"
+            if 'ProductID' in usage_df.columns:
+                stats_msg += f"- Unique Products: {usage_df['ProductID'].nunique():,}\n"
+            
+            stats_msg += "\n**Support Table:**\n"
+            stats_msg += f"- Records: {len(support_df):,}\n"
+            stats_msg += f"- Unique Customers: {support_df['CustomerID'].nunique():,}\n"
+            if 'ProductID' in support_df.columns:
+                stats_msg += f"- Unique Products: {support_df['ProductID'].nunique():,}\n"
+            
+            self.view.show_message(stats_msg, "info")
+            
+            if not self.session.get('joins_completed'):
+                # Join with usage data first (order doesn't matter due to left joins)
+                intermediate_df = self._perform_category_join(billing_df, usage_df, 'usage')
+                
+                # Then join with support data
+                final_df = self._perform_category_join(intermediate_df, support_df, 'support')
+                
+                # Add metadata columns
+                final_df['has_usage_data'] = True
+                final_df['has_support_data'] = True
+                
+                self._display_final_join_summary(final_df, ['usage', 'support'])
+                
+                if self.view.display_button("✅ Proceed to Post-Processing"):
+                    self.session.set('final_joined_table', final_df)
+                    self.session.set('joins_completed', True)
+                    self.session.set('proceed_to_post_processing', True)
+                    return {'final_table': final_df}  # Return table instead of calling post-processing
+                
+                return {'final_table': final_df}
+            
+            return None
+
+        except Exception as e:
+            print(f"Error in _handle_three_way_join: {str(e)}")
+            self.view.show_message(f"❌ Error in three-way join: {str(e)}", "error")
             return None
 
     def _perform_category_join(self, base_df: pd.DataFrame, join_df: pd.DataFrame, category: str) -> pd.DataFrame:
@@ -402,27 +426,32 @@ class Step5DataJoining:
                 status_msg += f"- {category.title()}: {len(tables[category])} files\n"
         status_msg += "\n"
         
+        # Check if all categories have single files
+        all_single_files = all(
+            len(tables.get(category, [])) == 1 
+            for category in self.categories 
+            if tables.get(category)
+        )
+        
         # Display intra-category join status
         status_msg += "**Intra-Category Join Status:**\n"
-        if self.session.get('intra_category_joins_completed'):
-            status_msg += "✅ All intra-category joins completed\n"
-        else:
+        if all_single_files:
             for category in self.categories:
                 if tables.get(category):
-                    if len(tables[category]) == 1:
-                        status_msg += f"- {category.title()}: Single file (no join needed)\n"
-                    else:
-                        status = "✅ Completed" if self.session.get(f'{category}_intra_join_completed') else "⏳ Pending"
-                        status_msg += f"- {category.title()}: {status}\n"
-        
-        # Display inter-category join status
-        status_msg += "\n**Inter-Category Join Status:**\n"
-        if self.session.get('inter_category_joins_completed'):
-            status_msg += "✅ All inter-category joins completed\n"
-        elif self.session.get('intra_category_joins_completed'):
-            status_msg += "⏳ Ready to start\n"
+                    status_msg += f"- {category.title()}: Single file (no join needed)\n"
+            status_msg += "\n**Inter-Category Join Status:** ✅ Ready for inter-category joins\n"
         else:
-            status_msg += "⏳ Waiting for intra-category joins\n"
+            if self.session.get('intra_category_joins_completed'):
+                status_msg += "✅ All intra-category joins completed\n"
+            else:
+                for category in self.categories:
+                    if tables.get(category):
+                        if len(tables[category]) == 1:
+                            status_msg += f"- {category.title()}: Single file (no join needed)\n"
+                        else:
+                            status = "✅ Completed" if self.session.get(f'{category}_intra_join_completed') else "⏳ Pending"
+                            status_msg += f"- {category.title()}: {status}\n"
+                status_msg += "\n**Inter-Category Join Status:** ⏳ Waiting for intra-category joins\n"
         
         self.view.display_markdown("---")
         self.view.show_message(status_msg, "info")
@@ -453,32 +482,38 @@ class Step5DataJoining:
         """Handle post-processing options after joins are complete"""
         final_df = self.session.get('final_joined_table')
         
+        # Always show success message at top
         self.view.show_message("🎉 All data joining steps completed successfully!", "success")
         
-        # Show post-processing options
-        self.view.display_markdown("### Post Processing Options")
-        operation_type = self.view.radio_select(
-            "Choose an operation:",
-            ["View Data", "Download Data", "Finish"]
-        )
-
-        if operation_type == "View Data":
-            self.view.display_dataframe(final_df)
-            return {'final_table': final_df}
+        # Display the data by default
+        self.view.display_markdown("### Final Joined Data")
+        self.view.display_dataframe(final_df)
         
-        elif operation_type == "Download Data":
+        self.view.display_markdown("### Options")
+        
+        # Create two columns for side-by-side buttons
+        col1, col2 = self.view.create_columns(2)
+        
+        with col1:
+            # Direct download button instead of two-step process
             csv_data = final_df.to_csv(index=False).encode('utf-8')
             self.view.create_download_button(
-                label="Download CSV",
+                label="⬇️ Download CSV",
                 data=csv_data,
                 file_name="joined_data.csv",
                 mime_type="text/csv"
             )
-            return {'final_table': final_df}
         
-        elif operation_type == "Finish":
-            if self.view.display_button("Confirm Finish"):
+        with col2:
+            if self.view.display_button("✅ Finish", key="post_processing_finish_btn"):
                 self.view.show_message("✨ Thank you for using the Data Joining Tool!", "success")
                 self.session.clear()
                 return None
-            return {'final_table': final_df}
+        
+        return {'final_table': final_df}
+
+    def _display_final_join_summary(self, df: pd.DataFrame, joined_categories: List[str]):
+        """Display final summary after joins are complete"""
+        self.view.display_markdown("### Final Join Summary")
+        self.view.display_markdown(f"- Total Records: {len(df):,}")
+        self.view.display_markdown(f"- Total Features: {len(df.columns):,}")

@@ -125,13 +125,17 @@ class Step2DataMapping:
         
         # Create a more readable file identifier
         file_identifier = f"{category.title()}_File{file_idx + 1}" if len(tables[category]) > 1 else category.title()
-        
+
+        # Show current mappings
+        self.view.display_markdown(f"## Review {file_identifier} Mappings")
+        self.view.display_markdown("(# indicates mandatory standard columns mappings)")
+
+
         self.view.show_message(
             f"""🎯 AI has suggested mappings for **{len(mapped_std_cols)}** out of 
             **{len(standard_columns)}** standard columns for **{file_identifier}**""", 
             "info"
-        )
-        
+        )      
         # Initialize selected mappings if not exists
         if not self.session.get(f'selected_mappings_{category}_{file_idx}'):
             self.session.set(f'selected_mappings_{category}_{file_idx}', column_mapping.copy())
@@ -139,9 +143,7 @@ class Step2DataMapping:
         selected_mappings = self.session.get(f'selected_mappings_{category}_{file_idx}')
         df_columns = df.columns.tolist()
         
-        # Show current mappings
-        self.view.display_subheader(f"Review {file_identifier} Mappings")
-        self.view.display_markdown("(# indicates mandatory standard columns mappings)")
+
         
         # Handle mapping selection with updated mandatory columns
         self._handle_mapping_selection(category, df, selected_mappings, mapped_std_cols, mandatory_columns, file_idx)
@@ -154,48 +156,63 @@ class Step2DataMapping:
         mapped_input_cols = [v for v in selected_mappings.values() if v is not None]
         available_input_cols = [col for col in df_columns if col not in mapped_input_cols]
 
-        # Track currently mapped columns to update mapped_std_cols dynamically
-        currently_mapped = []
-
-        # Review suggested mappings
-        for std_col in mapped_std_cols:
+        # Get all standard columns
+        all_std_cols = list(selected_mappings.keys())
+        
+        # Track currently mapped columns based on selected_mappings
+        currently_mapped = [col for col in all_std_cols if selected_mappings.get(col) is not None]
+        
+        # Display mapped columns section
+        self.view.display_markdown(f"#### Mapped Standard Columns ({len(currently_mapped)}/{len(all_std_cols)})")
+        
+        # Review mapped columns
+        for std_col in currently_mapped:
             col_display = f"{std_col} #" if std_col in mandatory_columns else std_col
-            recommended_col = selected_mappings[std_col]
-            options = [recommended_col] + [col for col in available_input_cols if col != recommended_col] + [None]
+            current_mapping = selected_mappings[std_col]
+            options = [current_mapping] + [col for col in available_input_cols if col != current_mapping] + [None]
+            
             new_mapping = self.view.select_box(
                 f"Standard Column: **{col_display}**",
                 options=options,
                 key=f"mapping_{category}_{std_col}"
             )
-            selected_mappings[std_col] = new_mapping
-            if new_mapping is not None:
-                currently_mapped.append(std_col)
-                if new_mapping in available_input_cols:
-                    available_input_cols.remove(new_mapping)
+            
+            if new_mapping != current_mapping:
+                with self.view.display_spinner('Updating mapping...'):
+                    if new_mapping is None:
+                        # Remove from mapped columns
+                        selected_mappings[std_col] = None
+                        if current_mapping:
+                            available_input_cols.append(current_mapping)
+                    else:
+                        # Update mapping
+                        selected_mappings[std_col] = new_mapping
+                        if new_mapping in available_input_cols:
+                            available_input_cols.remove(new_mapping)
+                        if current_mapping:
+                            available_input_cols.append(current_mapping)
+                    self.view.rerun_script()
 
-        # Update unmapped_std_cols based on current mapping state
-        unmapped_std_cols = [col for col in selected_mappings.keys() 
-                            if col not in currently_mapped]
-
-        # Handle additional mappings
+        # Handle unmapped columns
+        unmapped_std_cols = [col for col in all_std_cols if col not in currently_mapped]
+        
         if unmapped_std_cols:
             self.view.display_markdown("---")
-            self.view.show_message("### Map Additional Standard Columns", "info")
-            if self.view.display_button("Map Additional Columns", key=f"additional_{category}"):
-                self.session.set(f'show_additional_mapping_{category}', True)
-                self.view.rerun_script()
-
-            if self.session.get(f'show_additional_mapping_{category}'):
-                for std_col in unmapped_std_cols:
-                    col_display = f"{std_col} #" if std_col in mandatory_columns else std_col
-                    new_mapping = self.view.select_box(
-                        f"Standard Column: **{col_display}**",
-                        options=["None"] + available_input_cols,
-                        key=f"additional_mapping_{category}_{std_col}"
-                    )
-                    if new_mapping != "None":
+            self.view.display_markdown(f"#### Unmapped Standard Columns ({len(unmapped_std_cols)}/{len(all_std_cols)})")
+            
+            for std_col in unmapped_std_cols:
+                col_display = f"{std_col} #" if std_col in mandatory_columns else std_col
+                new_mapping = self.view.select_box(
+                    f"Standard Column: **{col_display}**",
+                    options=["None"] + available_input_cols,
+                    key=f"additional_mapping_{category}_{std_col}"
+                )
+                
+                if new_mapping != "None":
+                    with self.view.display_spinner('Updating mapping...'):
                         selected_mappings[std_col] = new_mapping
                         available_input_cols.remove(new_mapping)
+                        self.view.rerun_script()
 
         # Check for unmapped mandatory columns
         unmapped_mandatory = [col for col in mandatory_columns if selected_mappings.get(col) is None]
@@ -206,7 +223,6 @@ class Step2DataMapping:
             self.view.show_message(warning_msg, "warning")
             self.view.show_message("❗ Please map all mandatory columns before confirming.", "info")
         else:
-            # Fix: Use file_idx in the confirmation button key and session key
             if self.view.display_button("Confirm All Mappings", key=f"confirm_{category}_{file_idx}"):
                 self.view.show_message(f"✅ Mappings confirmed for {category} File {file_idx + 1}", "success")
                 self.session.set(f'mapping_confirmed_{category}_{file_idx}', True)
