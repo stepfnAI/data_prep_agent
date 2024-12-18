@@ -1,4 +1,5 @@
 myenv
+myyenv
 *.db
 *.db.sqlite3
 *.db.sqlite3-journal
@@ -11,3 +12,4 @@ test/test_step4.py
 appraoch_note.doc
 test/test_step5.py
 *.doc
+temp.py
