@@ -13,3 +13,4 @@ appraoch_note.doc
 test/test_step5.py
 *.doc
 temp.py
+.env
