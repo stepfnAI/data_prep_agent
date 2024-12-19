@@ -45,8 +45,8 @@ An AI-powered data processing pipeline designed for analyzing SaaS (Software as 
 
 1. Clone the repository:
 ```bash
-git clone git@github.com:stepfnAI/sfn_agents_pipeline.git
-cd sfn_agents_pipeline
+git clone git@github.com:stepfnAI/data_prep_agent.git
+cd data_prep_agent
 ```
 
 2. Create and activate a virtual environment:
