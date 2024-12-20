@@ -1,5 +1,4 @@
-sfn_blueprint==0.4.2
-sfn-cleaning-agent @ git+https://github.com/stepfnAI/cleaning_agent.git@agent_pip_module#egg=sfn_cleaning_agent
-sfn-feature-suggestion-agent @ git+https://github.com/stepfnAI/feature_suggestion_agent.git@main#egg=sfn_feature_suggestion_agent
-sfn-aggregation-agent @ git+https://github.com/stepfnAI/aggregation-agent.git@main#egg=sfn_aggregation_agent
-sfn-mapping-agent @ git+https://github.com/stepfnAI/mapping_agent.git@main#egg=sfn_mapping_agent
+# sfn_blueprint==0.4.2
+sfn-cleaning-agent @ git+https://github.com/stepfnAI/cleaning_agent.git@develop/feature1_code_restructure#egg=sfn_cleaning_agent
+sfn-aggregation-agent @ git+https://github.com/stepfnAI/aggregation_agent.git@develop/feature1_code_restructure#egg=sfn_aggregation_agent
+sfn-mapping-agent @ git+https://github.com/stepfnAI/mapping_agent.git@develop/feature1_code_restructure#egg=sfn_mapping_agent

@@ -2,8 +2,7 @@ from typing import Dict, Tuple, List, Optional
 import pandas as pd
 import logging
 from sfn_blueprint import Task
-from agents.column_mapping_agent import SFNColumnMappingAgent
-
+from mapping_agent.agents.column_mapping_agent import SFNColumnMappingAgent
 logger = logging.getLogger(__name__)
 
 class Step2DataMapping:

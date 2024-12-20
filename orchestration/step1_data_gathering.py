@@ -8,9 +8,8 @@ import logging
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from sfn_blueprint import Task
-from utils.custom_data_loader import CustomDataLoader
-from agents.category_identification_agent import SFNCategoryIdentificationAgent
-
+from mapping_agent.utils.custom_data_loader import CustomDataLoader
+from mapping_agent.agents.category_identification_agent import SFNCategoryIdentificationAgent
 logger = logging.getLogger(__name__)
 
 class Step1DataGathering:

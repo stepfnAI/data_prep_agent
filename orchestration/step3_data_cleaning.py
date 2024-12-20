@@ -2,7 +2,7 @@ from typing import Dict, List, Optional
 import pandas as pd
 import logging
 from sfn_blueprint import Task,SFNFeatureCodeGeneratorAgent, SFNCodeExecutorAgent
-from agents.clean_suggestions_agent import SFNCleanSuggestionsAgent
+from cleaning_agent.agents.clean_suggestions_agent import SFNCleanSuggestionsAgent
 logger = logging.getLogger(__name__)
 
 class Step3DataCleaning:
