@@ -1,4 +1,4 @@
-from agents.aggregation_agent import SFNAggregationAgent
+from aggregation_agent.agents.aggregation_agent import SFNAggregationAgent
 from sfn_blueprint import Task,SFNFeatureCodeGeneratorAgent, SFNCodeExecutorAgent
 from utils.data_type_utils import DataTypeUtils
 from typing import Dict, List, Tuple, Any
