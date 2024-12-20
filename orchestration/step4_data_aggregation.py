@@ -135,11 +135,10 @@ class Step4DataAggregation:
                 try:
                     # Get granularity level from session
                     granularity = self.session.get('problem_level', 'Customer Level')
-                    
+                    mapping_columns = self._get_mapping_dict(category.lower(), granularity)
                     agg_task = Task("Analyze aggregation", data={
                         'table': df,
-                        'category': category.lower(),  # Ensure lowercase for processing
-                        'granularity': granularity
+                        'mapping_columns': mapping_columns
                     })
                     analysis = self.aggregation_agent.execute_task(agg_task)
                     print(f"BEFORE SESSION: Analysis: {analysis}, Type: {type(analysis)}, ID: {id(analysis)}")
@@ -207,7 +206,7 @@ class Step4DataAggregation:
         
         # Get the groupby columns based on category and granularity
         granularity = self.session.get('problem_level', 'Customer Level')
-        groupby_columns = self.aggregation_agent._get_groupby_columns(category.lower(), granularity)
+        groupby_columns = self._get_groupby_columns(category.lower(), granularity)
         
         # Show AI suggestion stats
         if analysis:
@@ -369,7 +368,7 @@ class Step4DataAggregation:
         
         granularity = self.session.get('problem_level', 'Customer Level')
         category_lower = category.lower()
-        groupby_columns = self.aggregation_agent._get_groupby_columns(category_lower, granularity)
+        groupby_columns = self._get_groupby_columns(category_lower, granularity)
         print("\nGroupby columns:", groupby_columns)
         
         # Method mapping for pandas aggregation
@@ -444,3 +443,57 @@ class Step4DataAggregation:
                 else:
                     new_columns.append(col)
         return new_columns
+
+    def _get_mapping_dict(self, category: str, granularity: str) -> Dict[str, str]:
+        """Get mapping dictionary based on category and granularity level"""
+        
+        category_date_mapping = {
+            'billing': 'BillingDate',
+            'usage': 'UsageDate', 
+            'support': 'TicketOpenDate'
+        }
+
+        category = category.lower()
+        if category not in category_date_mapping:
+            raise ValueError(f"Unknown category: {category}")
+
+        mapping_dict = {
+            'customer_id': 'CustomerID',
+            'date': category_date_mapping[category]
+        }
+
+        if granularity == 'Product Level':
+            mapping_dict['product_id'] = 'ProductID'
+
+        return mapping_dict
+    
+    def _get_groupby_columns(self, category: str, granularity: str) -> List[str]:
+        """Get appropriate groupby columns based on category and granularity"""
+        category_groupby_mapping = {
+            'billing': {
+                'base_columns': ['CustomerID', 'BillingDate'],
+                'product_level': ['CustomerID', 'BillingDate', 'ProductID']
+            },
+            'usage': {
+                'base_columns': ['CustomerID', 'UsageDate'],
+                'product_level': ['CustomerID', 'UsageDate', 'ProductID']
+            },
+            'support': {
+                'base_columns': ['CustomerID', 'TicketOpenDate'],
+                'product_level': ['CustomerID', 'TicketOpenDate', 'ProductID']
+            }
+        }
+        print(f"Getting groupby columns for category: {category}, granularity: {granularity}")
+        print(f"Available categories: {list(category_groupby_mapping.keys())}")
+    
+        category = category.lower()
+        if category not in category_groupby_mapping:
+            raise ValueError(f"Unknown category: {category}")
+
+        if granularity == 'Product Level':
+            columns = category_groupby_mapping[category]['product_level']
+        else:
+            columns = category_groupby_mapping[category]['base_columns']
+    
+        print(f"Selected groupby columns: {columns}")
+        return columns
