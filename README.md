@@ -49,11 +49,14 @@ git clone git@github.com:stepfnAI/data_prep_agent.git
 cd data_prep_agent
 ```
 
-2. Create and activate a virtual environment:
+2. Create and activate a virtual environment using virtualenv:
+
 ```bash
-python -m venv venv       # or use python3 if you have multiple Python versions
-source venv/bin/activate  # Linux/Mac
-.\venv\Scripts\activate   # Windows
+pip install virtualenv                # Install virtualenv if not already installed
+virtualenv venv                       # Create virtual environment
+source venv/bin/activate             # Linux/Mac
+# OR
+.\venv\Scripts\activate              # Windows
 ```
 
 3. Install dependencies:
