@@ -1,17 +1,75 @@
-myenv
-myyenv
-myyenv
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environment
+venv/
+env/
+ENV/
+myenv/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Environment variables
+.env
+
+# OS
+.DS_Store
+Thumbs.db
 *.db
 *.db.sqlite3
 *.db.sqlite3-journal
 .pycache__
 *.pyc
 __pycache__/
-*.ipynb
-*.vscode
-test/test_step4.py
-appraoch_note.doc
-test/test_step5.py
-*.doc
-temp.py
-.env
+*.pyc
+# Python cache files
+__pycache__/
+*.pyc
+*/__pycache__/
+agents/__pycache__/
+config/__pycache__/
+
+# Build
+__pycache__/
+*.py[cod]
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+pip-wheel-metadata/
