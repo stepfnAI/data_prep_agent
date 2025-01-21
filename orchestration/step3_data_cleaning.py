@@ -14,7 +14,7 @@ class Step3DataCleaning:
         
         # Initialize cleaning agents
         self.suggestion_agent = SFNCleanSuggestionsAgent()
-        self.code_generator = SFNFeatureCodeGeneratorAgent()
+        self.code_generator = SFNFeatureCodeGeneratorAgent(llm_provider='openai')
         self.code_executor = SFNCodeExecutorAgent()
 
     def process_cleaning(self, tables: Dict[str, List[pd.DataFrame]]) -> Dict[str, List[pd.DataFrame]]:

@@ -10,7 +10,7 @@ class Step4DataAggregation:
         self.session = session_manager
         self.view = view
         self.categories = ['billing', 'usage', 'support']
-        self.aggregation_agent = SFNAggregationAgent()
+        self.aggregation_agent = SFNAggregationAgent(llm_provider='openai')
 
     def process_aggregation(self, tables: Dict[str, List[pd.DataFrame]]) -> Dict[str, List[pd.DataFrame]]:
         """Main method to process aggregation for all tables"""
