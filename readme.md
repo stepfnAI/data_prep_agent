@@ -38,7 +38,8 @@ An AI-powered data processing pipeline designed for analyzing SaaS (Software as 
 🚀 Getting Started
 
 **Prerequisites**
-- Python 3.8+
+
+- Python 3.9-3.11
 - OpenAI API key
 
 **Installation**
