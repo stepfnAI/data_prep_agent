@@ -164,11 +164,17 @@ class Step4DataAggregation:
         analysis = self.session.get(f'aggregation_analysis_{category}_{file_idx}')
         print(f"AFTER SESSION: Analysis: {analysis}, Type: {type(analysis)}, ID: {id(analysis)}")
         
-        if analysis is not None:  # Changed condition here
-            # Removed duplicate subheader since it's now at the top
-            
+        if analysis is not None:
             # Check if no aggregation is needed
-            if analysis == False:  # Keep using == for comparison
+            if isinstance(analysis, dict) and analysis.get('__no_aggregation_needed__'):
+                self.view.show_message("✅ No aggregation needed - data is already at the desired granularity.", "success")
+                self.session.set(f'aggregated_df_{category}_{file_idx}', df)
+                self.session.set(f'aggregation_confirmed_{category}_{file_idx}', True)
+                self.view.rerun_script()
+                return
+            
+            # Check if no aggregation is needed (legacy check)
+            if analysis == False:
                 self.view.show_message("✅ No aggregation needed - data is already at the desired granularity.", "success")
                 self.session.set(f'aggregated_df_{category}_{file_idx}', df)
                 self.session.set(f'aggregation_confirmed_{category}_{file_idx}', True)
